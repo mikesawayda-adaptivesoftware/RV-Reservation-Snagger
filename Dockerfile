@@ -28,21 +28,22 @@ RUN npm run build -- --configuration=production
 # ===========================================
 FROM node:20-slim AS backend-builder
 
-WORKDIR /app/backend
+WORKDIR /app
 
 # Copy backend package files
-COPY backend/package*.json ./
+COPY backend/package*.json ./backend/
 
 # Install dependencies
+WORKDIR /app/backend
 RUN npm ci --legacy-peer-deps
 
-# Copy backend source
-COPY backend/ ./
-
-# Copy shared types
-COPY shared/ ../shared/
+# Copy backend source and shared types
+WORKDIR /app
+COPY backend/ ./backend/
+COPY shared/ ./shared/
 
 # Build TypeScript
+WORKDIR /app/backend
 RUN npm run build
 
 # ===========================================
