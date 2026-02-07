@@ -111,95 +111,63 @@ echo -e "${GREEN}========================================${NC}"
 echo ""
 
 # Display the Unraid setup instructions
-echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}   🖥️  UNRAID SETUP INSTRUCTIONS${NC}"
-echo -e "${BLUE}========================================${NC}"
 echo ""
-echo -e "${YELLOW}FIRST TIME SETUP:${NC}"
+echo "========================================"
+echo "   UNRAID DOCKER RUN COMMAND"
+echo "========================================"
 echo ""
-echo -e "  1. SSH into your Unraid server."
+echo "Copy and paste this command into your Unraid terminal:"
 echo ""
-echo -e "  2. Login to GitHub Container Registry (one-time setup):"
-echo ""
-echo -e "     ${GREEN}echo 'YOUR_GITHUB_PAT_HERE' | docker login ghcr.io -u ${GITHUB_USERNAME} --password-stdin${NC}"
-echo ""
-echo -e "  3. Pull the latest image:"
-echo ""
-echo -e "     ${GREEN}docker pull ghcr.io/${GITHUB_USERNAME}/${APP_NAME}:latest${NC}"
-echo ""
-echo -e "  4. Stop/remove any old containers (if exists):"
-echo ""
-echo -e "     ${GREEN}docker rm -f ${APP_NAME} 2>/dev/null || true${NC}"
-echo ""
-echo -e "  5. Run the container:"
-echo ""
-echo -e "     ${GREEN}docker run -d \\${NC}"
-echo -e "     ${GREEN}  --name ${APP_NAME} \\${NC}"
-echo -e "     ${GREEN}  --restart unless-stopped \\${NC}"
-echo -e "     ${GREEN}  -p ${PORT}:3000 \\${NC}"
-echo -e "     ${GREEN}  -e NODE_ENV=production \\${NC}"
-echo -e "     ${GREEN}  -e FIREBASE_PROJECT_ID='rv-reservation-snagger' \\${NC}"
-echo -e "     ${GREEN}  -e FIREBASE_PRIVATE_KEY='YOUR_FIREBASE_PRIVATE_KEY' \\${NC}"
-echo -e "     ${GREEN}  -e FIREBASE_CLIENT_EMAIL='firebase-adminsdk-fbsvc@rv-reservation-snagger.iam.gserviceaccount.com' \\${NC}"
-echo -e "     ${GREEN}  -e RECREATION_GOV_API_KEY='YOUR_API_KEY' \\${NC}"
-echo -e "     ${GREEN}  -e STRIPE_SECRET_KEY='sk_test_xxx' \\${NC}"
-echo -e "     ${GREEN}  -e STRIPE_WEBHOOK_SECRET='whsec_xxx' \\${NC}"
-echo -e "     ${GREEN}  -e SENDGRID_API_KEY='SG.xxx' \\${NC}"
-echo -e "     ${GREEN}  -e SENDGRID_FROM_EMAIL='alerts@yourdomain.com' \\${NC}"
-echo -e "     ${GREEN}  -e FRONTEND_URL='http://192.168.0.248:${PORT}' \\${NC}"
-echo -e "     ${GREEN}  ghcr.io/${GITHUB_USERNAME}/${APP_NAME}:latest${NC}"
-echo ""
-echo -e "  6. Watch logs:"
-echo ""
-echo -e "     ${GREEN}docker logs -f ${APP_NAME}${NC}"
-echo ""
-echo -e "${YELLOW}TO UPDATE (after future deploys):${NC}"
-echo ""
-echo -e "     ${GREEN}docker pull ghcr.io/${GITHUB_USERNAME}/${APP_NAME}:latest${NC}"
-echo -e "     ${GREEN}docker rm -f ${APP_NAME} 2>/dev/null || true${NC}"
-echo -e "     ${GREEN}# Then run the docker run command above again${NC}"
-echo ""
-echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}   🌐 Access: http://192.168.0.248:${PORT}${NC}"
-echo -e "${BLUE}========================================${NC}"
-echo ""
-
-# Create a helper script for Unraid
-cat > "$APP_DIR/unraid-run.sh" << 'UNRAID_SCRIPT'
-#!/bin/bash
-# Run this on your Unraid server to start/update the container
-
-APP_NAME="rv-reservation-snagger"
-GITHUB_USERNAME="mikesawayda-adaptivesoftware"
-PORT=3088
-
-# Pull latest image
-docker pull ghcr.io/${GITHUB_USERNAME}/${APP_NAME}:latest
-
-# Stop and remove existing container
-docker rm -f ${APP_NAME} 2>/dev/null || true
-
-# Run new container
+echo "----------------------------------------"
+cat << 'DOCKER_CMD'
+docker pull ghcr.io/mikesawayda-adaptivesoftware/rv-reservation-snagger:latest && \
+docker rm -f rv-reservation-snagger 2>/dev/null; \
 docker run -d \
-  --name ${APP_NAME} \
+  --name rv-reservation-snagger \
   --restart unless-stopped \
-  -p ${PORT}:3000 \
+  -p 3088:3000 \
   -e NODE_ENV=production \
   -e FIREBASE_PROJECT_ID='rv-reservation-snagger' \
-  -e FIREBASE_PRIVATE_KEY="${FIREBASE_PRIVATE_KEY}" \
+  -e FIREBASE_PRIVATE_KEY='-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCpGQV0iPqC0sMx
+81ycaXqKDoFwc6ZY83vQv3tKhfZosbbgKpA59E6pOMPSWTf252JZoUAZiP5z0wFC
+yz3lzStoNNbB60xvzaLKEFLc3bcYGTAbIgGk1R6vlQytLZI1SnrNvU6fKQhKLtT1
+16D+ajLTT0Ny11b5K2mbgaqJtmcnp3h690jle53kmtYy1RKbRBjehjGMbV5ZMK8Q
+KiqWzEsDcGOAj4Ty5TAyFHsaxpl3jBZeaIwSxLvpDCnV68/OgDuNRk7+jjXiK9bJ
+ecqeQ2J9BE47qq4orxjuVRPLLlY/uxPtyWJDN/4B49yHKS3LvpQDbLqVZJdrche2
+gQ3L37ltAgMBAAECggEAFeoxvEwiV0EUXg1ho73BzVGa8eVzGhUYJ1IhmuNor2HU
+xxGNFo20ghbivgilCaEsLFyLD6QjAgTHJY5si7M+3Gb4rDIf+l9mqRRbgNdVKtDc
+3K9YEjIyo2PIPEtrJu/roW1W2qa5NdAC9oeHDGHcC2m63o/M7Eb1jVtNLELQ9KD4
+OU/IW/RwtjAfmuGnvrIMAae/pjb+PEMjSLjAEoj3lRcYk9eUNRSPzEYHkd6nkX4v
+cIlwP8WqbtrQGY3wqladvf8aKyon42S9eATAjf51XjRS9wuLXoLeQMJ/UATl1D/Z
+tBs1HXt8QeAttlvoZiYyK02wXXO9eehTf+yC3sbSSwKBgQDU1fhTYzIRdnq7mJ50
+XMEjIovYmqp3Us4o4aQItV5KuzlmsPNXsU41E72V4tquN4bohvaSImTCEhVoFU9R
+kON+4d8T5A3x9iU2/fHVpo89p7DiTMwh+0SyL0wOse3GWwdlTa7zUZdw/hlD35z1
+8mA3MWz6gqgTT5MB+x58JajDZwKBgQDLZEDm1pyoELlvlX0Nmn3+5BZmNRdjaGvZ
+7pB6EEwatrhkPZqT7PoKwF2uh/vKNiBeNfCiTG1aKzMhSY3p2YGrEGEXnrA3sszF
+9d9B2V3ey+avFyrKgbZFyJURBM96kHu+DwnstxsgNgmxdYpqwUiH93u2wWYHjEl/
+2Y44CEWMCwKBgQCHeBHxcagCuXjxQvlIc2lzZZ/BpOBvxsL1/nkcGeUEiBrHJEYf
+QPnYitIXPyeV0D4MbysuZLnhVQVPFJFCB4jlz/rffD7sDZIuaICvTq7JvZy2zc74
+qihViglNKS+BG5uffUyoDvznrLSEISaU3Usklk8ZPGSitfmKPz5uIsJCbQKBgFOo
+LLnF1DGcj2lCB2ms/d31WvE3LSOKM7Iz2eEbCvKB7V3tqMLnWgFKFj5PWFVX5gBa
+F1vqK6BG3IT4iBKDkD4YQpdAgiKmvGtAMlAXY/Db1Up3MPaSW7JgSk/xtpUnEH6g
+GOjwd4vMLjh7rC80yOyD8rK84YaBQUoA5epOHKz5AoGBAJ0SrGYrUOVINAW4jPMh
+o94//+puBE8qf2kL2liZS0XHL23E4ikmUMGIvJ/4ev+s7yiusmxch+uh84kTPRTk
+0UgF9s6A7gn0XYnPJmNNmiWgB2qU/KxWT351BEsWION4HmnSMwIV0LtdrO6lG3Qi
+gLCC8vHxj/q20pMYZFEpft6b
+-----END PRIVATE KEY-----' \
   -e FIREBASE_CLIENT_EMAIL='firebase-adminsdk-fbsvc@rv-reservation-snagger.iam.gserviceaccount.com' \
-  -e RECREATION_GOV_API_KEY="${RECREATION_GOV_API_KEY}" \
-  -e STRIPE_SECRET_KEY="${STRIPE_SECRET_KEY:-sk_test_xxx}" \
-  -e STRIPE_WEBHOOK_SECRET="${STRIPE_WEBHOOK_SECRET:-whsec_xxx}" \
-  -e SENDGRID_API_KEY="${SENDGRID_API_KEY:-}" \
-  -e SENDGRID_FROM_EMAIL="${SENDGRID_FROM_EMAIL:-alerts@example.com}" \
-  -e FRONTEND_URL="http://192.168.0.248:${PORT}" \
-  ghcr.io/${GITHUB_USERNAME}/${APP_NAME}:latest
-
-echo "Container started! Access at http://192.168.0.248:${PORT}"
-docker logs -f ${APP_NAME}
-UNRAID_SCRIPT
-
-chmod +x "$APP_DIR/unraid-run.sh"
-echo -e "${GREEN}📄 Created unraid-run.sh helper script${NC}"
+  -e RECREATION_GOV_API_KEY='8ab1bc8c-f1b6-4fb5-9f76-de0eda3a608b' \
+  -e STRIPE_SECRET_KEY='sk_test_xxxxxxxxxxxx' \
+  -e STRIPE_WEBHOOK_SECRET='whsec_xxxxxxxxxxxx' \
+  -e SENDGRID_API_KEY='SG.xxxxxxxxxxxx' \
+  -e SENDGRID_FROM_EMAIL='alerts@yourcampsitealerts.com' \
+  -e FRONTEND_URL='http://192.168.0.248:3088' \
+  ghcr.io/mikesawayda-adaptivesoftware/rv-reservation-snagger:latest
+DOCKER_CMD
+echo "----------------------------------------"
 echo ""
+echo "View logs: docker logs -f rv-reservation-snagger"
+echo "Access at: http://192.168.0.248:3088"
+echo ""
+
