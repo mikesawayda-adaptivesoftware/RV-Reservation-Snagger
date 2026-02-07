@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { db, COLLECTIONS } from '../config/firebase';
 import { verifyToken } from './auth';
-import { CampsiteAlert, ApiResponse, PaginatedResponse, AlertMatch } from '../../shared/types';
+import { CampsiteAlert, ApiResponse, PaginatedResponse, AlertMatch } from '../../../shared/types';
 import { PRICING_TIERS } from '../config/pricing';
 import { logger } from '../services/logger';
 import { v4 as uuidv4 } from 'uuid';

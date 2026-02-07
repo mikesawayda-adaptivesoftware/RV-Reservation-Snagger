@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
 import { db, COLLECTIONS } from '../config/firebase';
 import { config } from '../config';
-import { Subscription, SubscriptionStatus, SubscriptionTier } from '../../shared/types';
+import { Subscription, SubscriptionStatus, SubscriptionTier } from '../../../shared/types';
 import { PRICING_TIERS } from '../config/pricing';
 import { logger } from '../services/logger';
 import { v4 as uuidv4 } from 'uuid';

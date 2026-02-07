@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { db, COLLECTIONS } from '../config/firebase';
 import { PRICING_TIERS } from '../config/pricing';
-import { CampsiteAlert, SubscriptionTier } from '../../shared/types';
+import { CampsiteAlert, SubscriptionTier } from '../../../shared/types';
 import { logger } from '../services/logger';
 import { runScraperForAlert } from '../scrapers';
 

@@ -1,4 +1,4 @@
-import { UserProfile, CampsiteAlert, AlertMatch } from '../../shared/types';
+import { UserProfile, CampsiteAlert, AlertMatch } from '../../../shared/types';
 import { logger } from '../services/logger';
 import { sendEmail } from './email';
 import { sendSms } from './sms';

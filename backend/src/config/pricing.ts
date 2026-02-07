@@ -1,4 +1,4 @@
-import { PricingTier, SubscriptionTier } from '../../shared/types';
+import { PricingTier, SubscriptionTier } from '../../../shared/types';
 
 /**
  * Pricing Configuration

@@ -1,4 +1,4 @@
-import { CampsiteAlert, SiteType } from '../../shared/types';
+import { CampsiteAlert, SiteType } from '../../../shared/types';
 import { BaseScraper, AvailableSite } from './base';
 import { logger } from '../services/logger';
 

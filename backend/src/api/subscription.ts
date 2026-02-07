@@ -4,7 +4,7 @@ import { db, COLLECTIONS } from '../config/firebase';
 import { verifyToken } from './auth';
 import { config } from '../config';
 import { PRICING_TIERS, getAllPricingTiers } from '../config/pricing';
-import { ApiResponse, PricingTier, Subscription, SubscriptionTier } from '../../shared/types';
+import { ApiResponse, PricingTier, Subscription, SubscriptionTier } from '../../../shared/types';
 import { logger } from '../services/logger';
 
 const router = Router();

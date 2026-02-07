@@ -1,4 +1,4 @@
-import { CampsiteAlert, SiteType, DateRange } from '../../shared/types';
+import { CampsiteAlert, SiteType, DateRange } from '../../../shared/types';
 import { config } from '../config';
 import { logger } from '../services/logger';
 

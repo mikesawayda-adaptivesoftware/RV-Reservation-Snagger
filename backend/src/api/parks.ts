@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { verifyToken } from './auth';
-import { ApiResponse, ParkSearchResult, CampgroundSearchResult, ParkSystem } from '../../shared/types';
+import { ApiResponse, ParkSearchResult, CampgroundSearchResult, ParkSystem } from '../../../shared/types';
 import { logger } from '../services/logger';
 
 const router = Router();

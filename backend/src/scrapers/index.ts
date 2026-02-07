@@ -1,4 +1,4 @@
-import { CampsiteAlert, AlertMatch, ParkSystem } from '../../shared/types';
+import { CampsiteAlert, AlertMatch, ParkSystem } from '../../../shared/types';
 import { logger } from '../services/logger';
 import { RecreationGovScraper } from './recreation-gov';
 import { ReserveAmericaScraper } from './reserve-america';

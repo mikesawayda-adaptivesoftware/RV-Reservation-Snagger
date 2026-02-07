@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { db, COLLECTIONS } from '../config/firebase';
-import { CampsiteAlert, AlertMatch, NotificationMethod } from '../../shared/types';
+import { CampsiteAlert, AlertMatch, NotificationMethod } from '../../../shared/types';
 import { AvailableSite } from './base';
 import { logger } from '../services/logger';
 import { sendNotifications } from '../notifications';

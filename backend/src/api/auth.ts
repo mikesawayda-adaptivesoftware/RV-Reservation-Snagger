@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { auth, db, COLLECTIONS } from '../config/firebase';
-import { UserProfile, NotificationPreferences, ApiResponse } from '../../shared/types';
+import { UserProfile, NotificationPreferences, ApiResponse } from '../../../shared/types';
 import { logger } from '../services/logger';
 
 const router = Router();
