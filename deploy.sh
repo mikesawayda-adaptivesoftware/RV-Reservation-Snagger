@@ -2,6 +2,12 @@
 
 # RV Reservation Snagger - Deploy Script
 # This script commits changes to GitHub and pushes a new Docker image to ghcr.io
+#
+# Usage:
+#   ./deploy.sh                    # Full deploy: commit, push to GitHub, build & push to ghcr.io
+#   ./deploy.sh "commit message"   # Full deploy with custom commit message
+#   ./deploy.sh --local            # Build and run locally with docker compose
+#   ./deploy.sh "message" --local  # Commit changes, then build and run locally
 
 set -e  # Exit on error
 
@@ -72,6 +78,14 @@ fi
 echo "$GITHUB_CR_PAT" | docker login ghcr.io -u "$GITHUB_USERNAME" --password-stdin
 echo -e "${GREEN}✅ Logged into ghcr.io${NC}"
 echo ""
+
+# Check for --local flag
+if [[ "$1" == "--local" ]] || [[ "$2" == "--local" ]]; then
+    echo -e "${BLUE}🐳 Building and running locally with docker compose...${NC}"
+    cd "$APP_DIR"
+    docker compose up --build
+    exit 0
+fi
 
 # Build and push Docker image to ghcr.io
 echo -e "${BLUE}🐳 Building Docker image for linux/amd64 and pushing to ghcr.io...${NC}"
