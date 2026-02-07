@@ -12,7 +12,7 @@
 set -e  # Exit on error
 
 GITHUB_USERNAME="mikesawayda-adaptivesoftware"
-REPO_URL="https://github.com/AdaptiveSoftware/RV-Reservation-Snagger.git"
+REPO_URL="https://github.com/mikesawayda-adaptivesoftware/RV-Reservation-Snagger.git"
 APP_NAME="rv-reservation-snagger"
 PORT=3088
 
