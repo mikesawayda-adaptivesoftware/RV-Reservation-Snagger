@@ -84,7 +84,7 @@ async function searchRecreationGov(query: string, state?: string): Promise<ParkS
       return [];
     }
 
-    const data = await response.json();
+    const data: any = await response.json();
     
     // Transform RIDB response to our format
     const results: ParkSearchResult[] = (data.RECDATA || []).map((rec: any) => ({
@@ -149,7 +149,7 @@ async function getCampgroundsFromRecreationGov(recAreaId: string): Promise<Campg
       return [];
     }
 
-    const data = await response.json();
+    const data: any = await response.json();
     
     logger.info(`RIDB facilities response for recArea ${recAreaId}: ${(data.RECDATA || []).length} facilities found`);
     
@@ -260,7 +260,7 @@ async function getRecAreaDetails(recAreaId: string): Promise<ParkSearchResult | 
       return null;
     }
 
-    const rec = await response.json();
+    const rec: any = await response.json();
     
     return {
       id: rec.RecAreaID.toString(),
@@ -319,7 +319,7 @@ async function getFacilityDetails(facilityId: string, parkId: string): Promise<C
       return null;
     }
 
-    const fac = await response.json();
+    const fac: any = await response.json();
     
     return {
       id: fac.FacilityID.toString(),

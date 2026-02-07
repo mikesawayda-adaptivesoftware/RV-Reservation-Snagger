@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { db, COLLECTIONS } from '../config/firebase';
-import { CampsiteAlert, AlertMatch, NotificationMethod } from '../../../shared/types';
+import { CampsiteAlert, AlertMatch, NotificationMethod, DateRange } from '../../../shared/types';
 import { AvailableSite } from './base';
 import { logger } from '../services/logger';
 import { sendNotifications } from '../notifications';
@@ -124,7 +124,7 @@ export async function expireOldMatches(): Promise<void> {
     const match = doc.data() as AlertMatch;
     
     // Check if all available dates have passed
-    const allDatesExpired = match.availableDates.every((range) => {
+    const allDatesExpired = match.availableDates.every((range: DateRange) => {
       const endDate = new Date(range.end);
       return endDate < now;
     });

@@ -1,4 +1,4 @@
-import { UserProfile, CampsiteAlert, AlertMatch } from '../../../shared/types';
+import { UserProfile, CampsiteAlert, AlertMatch, DateRange } from '../../../shared/types';
 import { logger } from '../services/logger';
 import { sendEmail } from './email';
 import { sendSms } from './sms';
@@ -53,7 +53,7 @@ async function sendEmailNotification(
   const matchList = matches
     .map((m) => {
       const dates = m.availableDates
-        .map((d) => `${formatDate(d.start)} - ${formatDate(d.end)}`)
+        .map((d: DateRange) => `${formatDate(d.start)} - ${formatDate(d.end)}`)
         .join(', ');
       return `• ${m.siteName} (${m.siteType}): ${dates}`;
     })
@@ -90,7 +90,7 @@ async function sendEmailNotification(
           <p><strong>Site Type:</strong> ${m.siteType}</p>
           <p><strong>Available Dates:</strong></p>
           <ul>
-            ${m.availableDates.map((d) => `<li>${formatDate(d.start)} to ${formatDate(d.end)}</li>`).join('')}
+            ${m.availableDates.map((d: DateRange) => `<li>${formatDate(d.start)} to ${formatDate(d.end)}</li>`).join('')}
           </ul>
           <a href="${m.reservationUrl}" class="btn">Book Now</a>
         </div>
