@@ -39,10 +39,10 @@ import { ParksService } from '../../../core/services/parks.service';
                   <span class="campsite-label">Park</span>
                   <span class="campsite-value">{{ alert()!.parkName }}</span>
                 </div>
-                @if (alert()!.campgroundName) {
+                @if (getCampgroundSummary(alert()!)) {
                   <div class="campsite-detail">
-                    <span class="campsite-label">Campground</span>
-                    <span class="campsite-value">{{ alert()!.campgroundName }}</span>
+                    <span class="campsite-label">Campgrounds</span>
+                    <span class="campsite-value">{{ getCampgroundSummary(alert()!) }}</span>
                   </div>
                 }
                 @if (alert()!.specificSiteIds && alert()!.specificSiteIds!.length > 0) {
@@ -238,6 +238,32 @@ export class AlertEditComponent implements OnInit {
       }
       return [...types, type as SiteType];
     });
+  }
+
+  getCampgroundNames(alert: CampsiteAlert): string[] {
+    if (alert.campgroundNames && alert.campgroundNames.length > 0) {
+      return alert.campgroundNames;
+    }
+
+    if (alert.campgroundName) {
+      return [alert.campgroundName];
+    }
+
+    return [];
+  }
+
+  getCampgroundSummary(alert: CampsiteAlert): string {
+    const campgroundNames = this.getCampgroundNames(alert);
+
+    if (campgroundNames.length === 0) {
+      return '';
+    }
+
+    if (campgroundNames.length <= 3) {
+      return campgroundNames.join(', ');
+    }
+
+    return `${campgroundNames.slice(0, 2).join(', ')} + ${campgroundNames.length - 2} more`;
   }
 
   onSubmit() {

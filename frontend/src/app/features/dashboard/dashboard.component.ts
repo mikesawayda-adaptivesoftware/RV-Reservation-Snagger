@@ -77,8 +77,8 @@ import { SubscriptionService } from '../../core/services/subscription.service';
                     <h3>{{ alert.name }}</h3>
                     <p class="alert-meta">
                       {{ alert.parkName }}
-                      @if (alert.campgroundName) {
-                        &bull; {{ alert.campgroundName }}
+                      @if (getCampgroundSummary(alert)) {
+                        &bull; {{ getCampgroundSummary(alert) }}
                       }
                     </p>
                     <p class="alert-dates">
@@ -450,6 +450,32 @@ export class DashboardComponent implements OnInit {
 
   getTotalMatches(): number {
     return this.alertsService.alerts().reduce((sum, a) => sum + (a.matchesFound || 0), 0);
+  }
+
+  getCampgroundNames(alert: CampsiteAlert): string[] {
+    if (alert.campgroundNames && alert.campgroundNames.length > 0) {
+      return alert.campgroundNames;
+    }
+
+    if (alert.campgroundName) {
+      return [alert.campgroundName];
+    }
+
+    return [];
+  }
+
+  getCampgroundSummary(alert: CampsiteAlert): string {
+    const campgroundNames = this.getCampgroundNames(alert);
+
+    if (campgroundNames.length === 0) {
+      return '';
+    }
+
+    if (campgroundNames.length === 1) {
+      return campgroundNames[0];
+    }
+
+    return `${campgroundNames[0]} + ${campgroundNames.length - 1} more`;
   }
 
   private toDate(date: Date | string | { _seconds: number; _nanoseconds?: number } | null | undefined): Date | null {

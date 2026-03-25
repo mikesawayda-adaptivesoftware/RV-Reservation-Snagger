@@ -20,11 +20,19 @@ router.use(verifyToken);
 // Search parks using Recreation.gov RIDB API
 router.get('/search', async (req: Request, res: Response) => {
   try {
-    const { q, system, state } = req.query;
+    const { q, system, state, limit, offset } = req.query;
     const query = (q as string || '').trim();
+    const requestedLimit = Number.parseInt((limit as string) || '', 10);
+    const requestedOffset = Number.parseInt((offset as string) || '', 10);
+    const safeLimit = Number.isFinite(requestedLimit) && requestedLimit > 0
+      ? Math.min(requestedLimit, 100)
+      : undefined;
+    const safeOffset = Number.isFinite(requestedOffset) && requestedOffset >= 0
+      ? requestedOffset
+      : 0;
 
-    // If no query or query too short, return empty
-    if (!query || query.length < 2) {
+    // Require at least a state or a meaningful query so we don't request an unbounded park list.
+    if (!state && (!query || query.length < 2)) {
       const response: ApiResponse<ParkSearchResult[]> = {
         success: true,
         data: [],
@@ -35,7 +43,7 @@ router.get('/search', async (req: Request, res: Response) => {
 
     // For recreation_gov system, use the real API
     if (!system || system === 'recreation_gov') {
-      const results = await searchRecreationGov(query, state as string);
+      const results = await searchRecreationGov(query, state as string, safeLimit, safeOffset);
       const response: ApiResponse<ParkSearchResult[]> = {
         success: true,
         data: results,
@@ -57,14 +65,22 @@ router.get('/search', async (req: Request, res: Response) => {
 });
 
 // Search Recreation.gov using RIDB API
-async function searchRecreationGov(query: string, state?: string): Promise<ParkSearchResult[]> {
+async function searchRecreationGov(
+  query: string,
+  state?: string,
+  limit?: number,
+  offset: number = 0
+): Promise<ParkSearchResult[]> {
   try {
     const params = new URLSearchParams({
-      query: query,
-      limit: '20',
-      offset: '0',
+      limit: String(limit ?? (query ? 20 : 100)),
+      offset: String(offset),
       activity: 'CAMPING', // Only return places with camping
     });
+
+    if (query) {
+      params.append('query', query);
+    }
 
     if (state) {
       params.append('state', state.toUpperCase());
@@ -87,16 +103,23 @@ async function searchRecreationGov(query: string, state?: string): Promise<ParkS
     const data: any = await response.json();
     
     // Transform RIDB response to our format
-    const results: ParkSearchResult[] = (data.RECDATA || []).map((rec: any) => ({
-      id: rec.RecAreaID.toString(),
-      name: rec.RecAreaName,
-      parkSystem: 'recreation_gov' as ParkSystem,
-      state: extractState(rec.RECAREAADDRESS),
-      description: rec.RecAreaDescription ? 
-        stripHtml(rec.RecAreaDescription).substring(0, 200) + '...' : null,
-      imageUrl: rec.MEDIA?.[0]?.URL || null,
-      campgroundCount: rec.FACILITY?.length || 0,
-    }));
+    const results: ParkSearchResult[] = (data.RECDATA || [])
+      .map((rec: any) => ({
+        id: rec.RecAreaID.toString(),
+        name: rec.RecAreaName,
+        parkSystem: 'recreation_gov' as ParkSystem,
+        state: extractState(rec.RECAREAADDRESS),
+        description: rec.RecAreaDescription ? 
+          stripHtml(rec.RecAreaDescription).substring(0, 200) + '...' : null,
+        imageUrl: rec.MEDIA?.[0]?.URL || null,
+        campgroundCount: rec.FACILITY?.length || 0,
+        latitude: parseCoordinate(rec.RecAreaLatitude),
+        longitude: parseCoordinate(rec.RecAreaLongitude),
+      }))
+      .sort((a: ParkSearchResult, b: ParkSearchResult) => {
+        const campgroundDiff = b.campgroundCount - a.campgroundCount;
+        return campgroundDiff !== 0 ? campgroundDiff : a.name.localeCompare(b.name);
+      });
 
     return results;
   } catch (error) {
@@ -180,15 +203,6 @@ async function getCampgroundsFromRecreationGov(recAreaId: string): Promise<Campg
           (reservationUrl === '' || 
            reservationUrl.includes('recreation.gov/camping/campgrounds'));
         
-        // Also filter out POI-style IDs (they tend to be 8+ digits starting with 10)
-        const facilityId = fac.FacilityID?.toString() || '';
-        const isPOI = facilityId.startsWith('10') && facilityId.length >= 8;
-        
-        if (isPOI) {
-          logger.debug(`Filtering out POI facility: ${fac.FacilityName} (ID: ${facilityId})`);
-          return false;
-        }
-        
         // If we can't determine reservability, include it but log a warning
         if (fac.Reservable === undefined) {
           logger.debug(`Unknown reservability for: ${fac.FacilityName}`);
@@ -270,6 +284,8 @@ async function getRecAreaDetails(recAreaId: string): Promise<ParkSearchResult | 
       description: rec.RecAreaDescription ? stripHtml(rec.RecAreaDescription) : null,
       imageUrl: rec.MEDIA?.[0]?.URL || null,
       campgroundCount: rec.FACILITY?.length || 0,
+      latitude: parseCoordinate(rec.RecAreaLatitude),
+      longitude: parseCoordinate(rec.RecAreaLongitude),
     };
   } catch (error) {
     logger.error('Error fetching rec area details:', error);
@@ -391,6 +407,19 @@ function extractAmenities(facility: any): string[] {
   }
 
   return amenities.slice(0, 10); // Limit to 10 amenities
+}
+
+function parseCoordinate(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
 }
 
 export default router;

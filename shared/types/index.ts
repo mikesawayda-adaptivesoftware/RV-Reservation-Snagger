@@ -40,8 +40,11 @@ export interface CampsiteAlert {
   parkSystem: ParkSystem;
   parkId: string;
   parkName: string;
-  campgroundId: string | null;
-  campgroundName: string | null;
+  stateCode?: string | null;
+  campgroundId?: string | null;
+  campgroundName?: string | null;
+  campgroundIds?: string[] | null;
+  campgroundNames?: string[] | null;
   siteTypes: SiteType[];
   dateRangeStart: Date;
   dateRangeEnd: Date;
@@ -63,6 +66,7 @@ export interface AlertMatch {
   userId: string;
   parkSystem: ParkSystem;
   parkName: string;
+  campgroundId?: string;
   campgroundName: string;
   siteName: string;
   siteId: string;
@@ -154,6 +158,8 @@ export interface ParkSearchResult {
   description: string | null;
   imageUrl: string | null;
   campgroundCount: number;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface CampgroundSearchResult {

@@ -21,8 +21,11 @@ router.post('/', async (req: Request, res: Response) => {
       parkSystem,
       parkId,
       parkName,
+      stateCode,
       campgroundId,
       campgroundName,
+      campgroundIds,
+      campgroundNames,
       siteTypes,
       dateRangeStart,
       dateRangeEnd,
@@ -57,11 +60,24 @@ router.post('/', async (req: Request, res: Response) => {
       return;
     }
 
+    const normalizedCampgroundIds =
+      Array.isArray(campgroundIds) && campgroundIds.length > 0
+        ? campgroundIds
+        : campgroundId
+          ? [campgroundId]
+          : [];
+    const normalizedCampgroundNames =
+      Array.isArray(campgroundNames) && campgroundNames.length > 0
+        ? campgroundNames
+        : campgroundName
+          ? [campgroundName]
+          : [];
+
     // Validate campground selection for Recreation.gov (required for availability API)
-    if (parkSystem === 'recreation_gov' && !campgroundId) {
+    if (parkSystem === 'recreation_gov' && normalizedCampgroundIds.length === 0) {
       res.status(400).json({
         success: false,
-        error: 'Please select a specific campground for Recreation.gov alerts. The availability API requires a campground selection.',
+        error: 'Please select at least one campground for Recreation.gov alerts. The availability API requires a campground selection.',
       });
       return;
     }
@@ -75,8 +91,11 @@ router.post('/', async (req: Request, res: Response) => {
       parkSystem,
       parkId,
       parkName,
-      campgroundId: campgroundId || null,
-      campgroundName: campgroundName || null,
+      stateCode: stateCode || null,
+      campgroundId: normalizedCampgroundIds[0] || null,
+      campgroundName: normalizedCampgroundNames[0] || null,
+      campgroundIds: normalizedCampgroundIds.length > 0 ? normalizedCampgroundIds : null,
+      campgroundNames: normalizedCampgroundNames.length > 0 ? normalizedCampgroundNames : null,
       siteTypes: siteTypes || ['tent', 'rv'],
       dateRangeStart: new Date(dateRangeStart),
       dateRangeEnd: new Date(dateRangeEnd),

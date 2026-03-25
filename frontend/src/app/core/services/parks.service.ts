@@ -11,6 +11,8 @@ export interface ParkSearchResult {
   description: string | null;
   imageUrl: string | null;
   campgroundCount: number;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface CampgroundSearchResult {
@@ -24,6 +26,11 @@ export interface CampgroundSearchResult {
   amenities: string[];
 }
 
+export interface ParkSearchOptions {
+  limit?: number;
+  offset?: number;
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -31,11 +38,18 @@ export class ParksService {
   private api = inject(ApiService);
 
   // Search parks
-  searchParks(query?: string, system?: ParkSystem, state?: string): Observable<ParkSearchResult[]> {
+  searchParks(
+    query?: string,
+    system?: ParkSystem,
+    state?: string,
+    options?: ParkSearchOptions
+  ): Observable<ParkSearchResult[]> {
     const params: Record<string, any> = {};
     if (query) params['q'] = query;
     if (system) params['system'] = system;
     if (state) params['state'] = state;
+    if (options?.limit !== undefined) params['limit'] = options.limit;
+    if (options?.offset !== undefined) params['offset'] = options.offset;
 
     return this.api.get<ParkSearchResult[]>('/parks/search', params);
   }

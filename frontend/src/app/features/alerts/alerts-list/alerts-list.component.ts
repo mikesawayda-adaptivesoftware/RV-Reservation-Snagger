@@ -70,8 +70,8 @@ import { ParksService } from '../../../core/services/parks.service';
                 
                 <h3>{{ alert.name }}</h3>
                 <p class="park-name">{{ alert.parkName }}</p>
-                @if (alert.campgroundName) {
-                  <p class="campground-name">{{ alert.campgroundName }}</p>
+                @if (getCampgroundSummary(alert)) {
+                  <p class="campground-name">{{ getCampgroundSummary(alert) }}</p>
                 }
 
                 <div class="alert-details">
@@ -423,6 +423,32 @@ export class AlertsListComponent implements OnInit {
       return 'Any';
     }
     return types.map((t) => this.parksService.getSiteTypeName(t as any)).join(', ');
+  }
+
+  getCampgroundNames(alert: CampsiteAlert): string[] {
+    if (alert.campgroundNames && alert.campgroundNames.length > 0) {
+      return alert.campgroundNames;
+    }
+
+    if (alert.campgroundName) {
+      return [alert.campgroundName];
+    }
+
+    return [];
+  }
+
+  getCampgroundSummary(alert: CampsiteAlert): string {
+    const campgroundNames = this.getCampgroundNames(alert);
+
+    if (campgroundNames.length === 0) {
+      return '';
+    }
+
+    if (campgroundNames.length === 1) {
+      return campgroundNames[0];
+    }
+
+    return `${campgroundNames[0]} + ${campgroundNames.length - 1} more`;
   }
 
   formatRelativeTime(date: Date | string | { _seconds: number } | null | undefined): string {

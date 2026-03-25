@@ -61,10 +61,11 @@ RV-Reservation-Snagger/
 
 ### Prerequisites
 - Node.js 18+
-- Firebase project with Auth and Firestore enabled
-- Stripe account
-- SendGrid account (for email)
-- Twilio account (for SMS)
+- Firebase project with Authentication and Firestore enabled
+- Recreation.gov RIDB API key (recommended for park search)
+- Stripe account (optional, only for subscription checkout/billing flows)
+- SendGrid account (optional, only for live email delivery)
+- Twilio account (optional, only for live SMS delivery)
 
 ### Backend Setup
 
@@ -84,10 +85,11 @@ RV-Reservation-Snagger/
    ```
 
 4. Configure your `.env` file with:
-   - Firebase Admin SDK credentials
-   - Stripe API keys
-   - SendGrid API key
-   - Twilio credentials
+   - Firebase Admin SDK credentials (`FIREBASE_PROJECT_ID`, `FIREBASE_PRIVATE_KEY`, `FIREBASE_CLIENT_EMAIL`)
+   - Recreation.gov RIDB API key (`RECREATION_GOV_API_KEY`) if you want park search to return real results
+   - Stripe API keys if you want to test subscription checkout or billing
+   - SendGrid API key if you want to send real emails
+   - Twilio credentials if you want to send real SMS messages
 
 5. Start the development server:
    ```bash
@@ -106,7 +108,9 @@ RV-Reservation-Snagger/
    npm install
    ```
 
-3. Update `src/environments/environment.ts` with your Firebase config
+3. Verify `src/environments/environment.ts` and `src/environments/environment.prod.ts` point to the Firebase project you want to use.
+
+   The repo already includes a Firebase web config. You only need to change it if you are using a different Firebase project.
 
 4. Start the development server:
    ```bash
@@ -116,12 +120,19 @@ RV-Reservation-Snagger/
 ### Firebase Setup
 
 1. Create a Firebase project at https://console.firebase.google.com
-2. Enable Authentication with Email/Password and Google providers
+2. Enable Authentication with:
+   - Email/Password
+   - Google
+   - Facebook (required if you want the Facebook sign-in button to work)
 3. Enable Cloud Firestore
-4. Set up Firestore security rules (see below)
-5. Generate a service account key for the backend
+4. Generate a service account key for the backend
+5. Set up Firestore security rules if you plan to access Firestore directly from the frontend
+
+   The current backend uses the Firebase Admin SDK, which bypasses Firestore security rules. The current frontend initializes Firestore, but most app data access still goes through the backend API.
 
 ### Firestore Security Rules
+
+These rules are a good starting point if you later move more Firestore access into the frontend. They are not required for backend Admin SDK access.
 
 ```javascript
 rules_version = '2';

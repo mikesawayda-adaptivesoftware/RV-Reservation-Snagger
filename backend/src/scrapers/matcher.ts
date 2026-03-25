@@ -39,13 +39,13 @@ export async function processMatches(
   existingMatchesSnapshot.docs.forEach((doc) => {
     const match = doc.data() as AlertMatch;
     // Create a unique key for deduplication
-    const key = `${match.siteId}-${JSON.stringify(match.availableDates)}`;
+    const key = `${match.campgroundId || 'unknown'}-${match.siteId}-${JSON.stringify(match.availableDates)}`;
     existingMatches.add(key);
   });
 
   for (const site of availableSites) {
     // Check for duplicates
-    const matchKey = `${site.siteId}-${JSON.stringify(site.availableDates)}`;
+    const matchKey = `${site.campgroundId}-${site.siteId}-${JSON.stringify(site.availableDates)}`;
     
     if (existingMatches.has(matchKey)) {
       logger.debug(`Skipping duplicate match for site ${site.siteId}`);
@@ -60,6 +60,7 @@ export async function processMatches(
       userId: alert.userId,
       parkSystem: alert.parkSystem,
       parkName: alert.parkName,
+      campgroundId: site.campgroundId,
       campgroundName: site.campgroundName,
       siteName: site.siteName,
       siteId: site.siteId,

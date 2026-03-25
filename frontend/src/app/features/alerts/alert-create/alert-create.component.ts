@@ -1,11 +1,22 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { AlertsService, CreateAlertDto, ParkSystem, SiteType } from '../../../core/services/alerts.service';
-import { ParksService, ParkSearchResult, CampgroundSearchResult } from '../../../core/services/parks.service';
 import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
 import { of } from 'rxjs';
+import type * as Leaflet from 'leaflet';
+
+import { AlertsService, CreateAlertDto, ParkSystem, SiteType } from '../../../core/services/alerts.service';
+import { ParksService, ParkSearchResult, CampgroundSearchResult } from '../../../core/services/parks.service';
+
+interface StateOption {
+  code: string;
+  name: string;
+}
+
+type ParkAlertabilityStatus = 'checking' | 'alertable' | 'not_alertable';
+
+const PARK_PAGE_SIZE = 100;
 
 @Component({
   selector: 'app-alert-create',
@@ -24,7 +35,6 @@ import { of } from 'rxjs';
             <div class="error-message">{{ error() }}</div>
           }
 
-          <!-- Step 1: Park System -->
           <section class="form-section">
             <h2>1. Select Park System</h2>
             <div class="park-systems">
@@ -48,38 +58,63 @@ import { of } from 'rxjs';
             </div>
           </section>
 
-          <!-- Step 2: Park Selection -->
           @if (form.get('parkSystem')?.value) {
             <section class="form-section">
-              <h2>2. Select Park</h2>
+              <h2>2. Pick a State</h2>
+              <div class="form-group">
+                <label for="stateCode">State</label>
+                <select id="stateCode" formControlName="stateCode" (change)="onStateChange()">
+                  <option value="">Choose a state</option>
+                  @for (state of states; track state.code) {
+                    <option [value]="state.code">{{ state.name }}</option>
+                  }
+                </select>
+              </div>
+              <p class="form-hint">State selection narrows the park search results before you choose campgrounds.</p>
+            </section>
+          }
+
+          @if (form.get('parkSystem')?.value && form.get('stateCode')?.value) {
+            <section class="form-section">
+              <h2>3. Select a Park</h2>
               <div class="form-group">
                 <label for="parkSearch">Search Parks</label>
                 <input 
                   type="text" 
                   id="parkSearch"
                   formControlName="parkSearch"
-                  placeholder="Type to search parks..."
+                  placeholder="Type to filter parks in the selected state..."
                   autocomplete="off"
                 />
               </div>
+              <p class="form-hint">The list below is preloaded for the selected state. Use search to filter it down.</p>
+
+              <div class="view-toggle">
+                <button
+                  type="button"
+                  class="view-toggle-btn"
+                  [class.active]="parkViewMode() === 'list'"
+                  (click)="setParkViewMode('list')"
+                >
+                  List
+                </button>
+                <button
+                  type="button"
+                  class="view-toggle-btn"
+                  [class.active]="parkViewMode() === 'map'"
+                  (click)="setParkViewMode('map')"
+                  [disabled]="mappableParks().length === 0"
+                >
+                  Map
+                </button>
+              </div>
 
               @if (searchLoading()) {
-                <div class="search-loading">Searching...</div>
-              }
-
-              @if (parkResults().length > 0 && !selectedPark()) {
-                <div class="search-results">
-                  @for (park of parkResults(); track park.id) {
-                    <button 
-                      type="button" 
-                      class="search-result"
-                      (click)="selectPark(park)"
-                    >
-                      <span class="result-name">{{ park.name }}</span>
-                      <span class="result-meta">{{ park.state }}{{ park.campgroundCount ? ' • ' + park.campgroundCount + ' campgrounds' : '' }}</span>
-                    </button>
-                  }
-                </div>
+                <div class="search-loading">Loading parks...</div>
+              } @else if (parkResults().length === 0 && availableParks().length === 0) {
+                <div class="search-loading">No parks found for this state yet.</div>
+              } @else if (parkResults().length === 0 && availableParks().length > 0 && !selectedPark()) {
+                <div class="search-loading">No parks match your current filter.</div>
               }
 
               @if (selectedPark()) {
@@ -88,57 +123,143 @@ import { of } from 'rxjs';
                     <strong>{{ selectedPark()!.name }}</strong>
                     <span>{{ selectedPark()!.state }}</span>
                   </div>
-                  <button type="button" class="btn-clear" (click)="clearPark()">Change</button>
+                  <button type="button" class="btn-clear" (click)="clearPark()">Clear selection</button>
                 </div>
+              }
+
+              @if (parkResults().length > 0) {
+                <div class="selection-summary">
+                  <span>{{ parkResults().length }} park(s) shown</span>
+                  <span>{{ availableParks().length }} loaded for this state</span>
+                </div>
+
+                @if (parkViewMode() === 'list') {
+                  <div class="search-results">
+                    @for (park of parkResults(); track park.id) {
+                      <button 
+                        type="button" 
+                        class="search-result"
+                        [class.selected]="isParkSelected(park.id)"
+                        (click)="selectPark(park)"
+                      >
+                        <span class="result-header">
+                          <span class="result-name">{{ park.name }}</span>
+                          @if (getParkAlertabilityStatus(park.id) === 'not_alertable') {
+                            <span class="park-badge park-badge-warning">Not alertable right now</span>
+                          } @else if (getParkAlertabilityStatus(park.id) === 'checking') {
+                            <span class="park-badge park-badge-muted">Checking...</span>
+                          }
+                        </span>
+                        <span class="result-meta">
+                          {{ park.state }}{{ park.campgroundCount ? ' • ' + park.campgroundCount + ' campgrounds' : '' }}
+                        </span>
+                      </button>
+                    }
+                  </div>
+                } @else {
+                  @if (mappableParks().length > 0) {
+                    <div class="park-map-shell">
+                      <div #parkMap class="park-map"></div>
+                    </div>
+                    <p class="form-hint">Hover a pin to preview details. Click a pin to select that park. The map only shows parks with coordinates.</p>
+                  } @else {
+                    <div class="search-loading">No park coordinates are available for this filtered list.</div>
+                  }
+                }
+
+                @if (canLoadMoreParks() && !selectedPark()) {
+                  <div class="load-more-row">
+                    <button
+                      type="button"
+                      class="btn btn-outline"
+                      [disabled]="loadingMoreParks()"
+                      (click)="loadMoreParks()"
+                    >
+                      {{ loadingMoreParks() ? 'Loading more parks...' : 'Load More Parks' }}
+                    </button>
+                  </div>
+                }
               }
             </section>
           }
 
-          <!-- Step 3: Campground Selection (Optional) -->
           @if (selectedPark()) {
             <section class="form-section">
-              <h2>3. Select Campground (Optional)</h2>
-              <p class="form-hint">Leave unselected to monitor all campgrounds in this park.</p>
+              <h2>4. Select Campgrounds</h2>
+              <p class="form-hint">
+                Choose one or more campgrounds in {{ selectedPark()!.name }}.
+                @if (isCampgroundSelectionRequired()) {
+                  Recreation.gov alerts require at least one campground.
+                }
+              </p>
               
               @if (campgroundsLoading()) {
                 <div class="loading-campgrounds">Loading campgrounds...</div>
               } @else if (campgrounds().length === 0) {
-                <p class="no-campgrounds">No specific campgrounds found. The alert will monitor the entire recreation area.</p>
+                <p class="no-campgrounds">No campgrounds found for this park.</p>
               } @else {
+                <div class="toolbar-row">
+                  <div class="form-group toolbar-search">
+                    <label for="campgroundFilter">Filter Campgrounds</label>
+                    <input
+                      type="text"
+                      id="campgroundFilter"
+                      [value]="campgroundFilter()"
+                      (input)="onCampgroundFilterChange($event)"
+                      placeholder="Type campground name..."
+                    />
+                  </div>
+                  <div class="toolbar-actions">
+                    <button type="button" class="btn btn-outline btn-small" (click)="selectAllFilteredCampgrounds()">
+                      Select Filtered
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-small" (click)="clearCampgrounds()">
+                      Clear All
+                    </button>
+                  </div>
+                </div>
+
+                <div class="selection-summary">
+                  <span>{{ selectedCampgrounds().length }} campground(s) selected</span>
+                  @if (filteredCampgrounds().length !== campgrounds().length) {
+                    <span>{{ filteredCampgrounds().length }} matching current filter</span>
+                  }
+                </div>
+
+                @if (selectedCampgrounds().length > 0) {
+                  <div class="selected-chips">
+                    @for (cg of selectedCampgrounds(); track cg.id) {
+                      <button type="button" class="chip" (click)="toggleCampground(cg)">
+                        {{ cg.name }} ×
+                      </button>
+                    }
+                  </div>
+                }
+
                 <div class="campground-grid">
-                  @for (cg of campgrounds(); track cg.id) {
-                    <label 
-                      class="campground-option"
-                      [class.selected]="selectedCampground()?.id === cg.id"
-                    >
-                      <input 
-                        type="radio" 
-                        name="campground" 
-                        [value]="cg.id"
-                        [checked]="selectedCampground()?.id === cg.id"
-                        (change)="selectCampground(cg)"
+                  @for (cg of filteredCampgrounds(); track cg.id) {
+                    <label class="campground-option" [class.selected]="isCampgroundSelected(cg.id)">
+                      <input
+                        type="checkbox"
+                        [checked]="isCampgroundSelected(cg.id)"
+                        (change)="toggleCampground(cg)"
                       />
                       <span class="option-content">
                         <span class="option-name">{{ cg.name }}</span>
-                        <span class="option-desc">{{ cg.totalSites ? cg.totalSites + ' sites' : '' }}</span>
+                        <span class="option-desc">
+                          {{ cg.totalSites ? cg.totalSites + ' sites' : 'Site count unavailable' }}
+                        </span>
                       </span>
                     </label>
                   }
                 </div>
               }
-              
-              @if (selectedCampground()) {
-                <button type="button" class="btn-text" (click)="clearCampground()">
-                  Clear selection (monitor all campgrounds)
-                </button>
-              }
             </section>
           }
 
-          <!-- Step 4: Date Range -->
           @if (selectedPark()) {
             <section class="form-section">
-              <h2>{{ campgrounds().length > 0 ? '4' : '3' }}. Select Dates</h2>
+              <h2>5. Select Dates</h2>
               <div class="date-inputs">
                 <div class="form-group">
                   <label for="dateStart">Start Date</label>
@@ -169,10 +290,9 @@ import { of } from 'rxjs';
             </section>
           }
 
-          <!-- Step 5: Site Preferences -->
           @if (selectedPark()) {
             <section class="form-section">
-              <h2>{{ campgrounds().length > 0 ? '5' : '4' }}. Site Preferences</h2>
+              <h2>6. Site Preferences</h2>
               
               <div class="form-group">
                 <label>Site Types</label>
@@ -216,10 +336,9 @@ import { of } from 'rxjs';
             </section>
           }
 
-          <!-- Step 6: Alert Name -->
           @if (selectedPark()) {
             <section class="form-section">
-              <h2>{{ campgrounds().length > 0 ? '6' : '5' }}. Name Your Alert</h2>
+              <h2>7. Name Your Alert</h2>
               <div class="form-group">
                 <label for="name">Alert Name</label>
                 <input 
@@ -233,7 +352,6 @@ import { of } from 'rxjs';
             </section>
           }
 
-          <!-- Submit -->
           @if (selectedPark()) {
             <div class="form-actions">
               <a routerLink="/alerts" class="btn btn-secondary">Cancel</a>
@@ -380,7 +498,18 @@ import { of } from 'rxjs';
       box-sizing: border-box;
     }
 
-    .form-group input:focus {
+    .form-group select {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 1rem;
+      box-sizing: border-box;
+      background: white;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
       outline: none;
       border-color: #2E7D32;
     }
@@ -395,6 +524,36 @@ import { of } from 'rxjs';
       padding: 1rem;
       color: #666;
       text-align: center;
+    }
+
+    .view-toggle {
+      display: inline-flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      padding: 0.25rem;
+      background: #f5f5f5;
+      border-radius: 10px;
+    }
+
+    .view-toggle-btn {
+      border: none;
+      background: transparent;
+      color: #555;
+      padding: 0.5rem 0.9rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .view-toggle-btn.active {
+      background: white;
+      color: #2E7D32;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+    }
+
+    .view-toggle-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     .search-results {
@@ -423,15 +582,45 @@ import { of } from 'rxjs';
       background: #f5f5f5;
     }
 
+    .search-result.selected {
+      background: #E8F5E9;
+      box-shadow: inset 3px 0 0 #2E7D32;
+    }
+
     .result-name {
-      display: block;
       font-weight: 500;
       color: #1a1a1a;
+    }
+
+    .result-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.25rem;
     }
 
     .result-meta {
       font-size: 0.875rem;
       color: #666;
+    }
+
+    .park-badge {
+      border-radius: 999px;
+      padding: 0.25rem 0.55rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .park-badge-warning {
+      background: #FFF3E0;
+      color: #E65100;
+    }
+
+    .park-badge-muted {
+      background: #F1F3F4;
+      color: #5F6368;
     }
 
     .selected-item {
@@ -441,6 +630,7 @@ import { of } from 'rxjs';
       padding: 1rem;
       background: #E8F5E9;
       border-radius: 8px;
+      margin-bottom: 1rem;
     }
 
     .btn-clear {
@@ -449,6 +639,67 @@ import { of } from 'rxjs';
       color: #2E7D32;
       cursor: pointer;
       text-decoration: underline;
+    }
+
+    .toolbar-row {
+      display: flex;
+      gap: 1rem;
+      align-items: end;
+      margin-bottom: 1rem;
+    }
+
+    .toolbar-search {
+      flex: 1;
+      margin-bottom: 0;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .selection-summary {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 0.75rem;
+      color: #666;
+      font-size: 0.875rem;
+    }
+
+    .park-map-shell {
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 0.5rem;
+    }
+
+    .park-map {
+      height: 420px;
+      width: 100%;
+    }
+
+    .load-more-row {
+      display: flex;
+      justify-content: center;
+      margin-top: 1rem;
+    }
+
+    .selected-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .chip {
+      border: none;
+      background: #E8F5E9;
+      color: #2E7D32;
+      border-radius: 999px;
+      padding: 0.4rem 0.75rem;
+      cursor: pointer;
+      font-size: 0.875rem;
     }
 
     .campground-grid {
@@ -473,15 +724,6 @@ import { of } from 'rxjs';
 
     .campground-option input {
       margin-right: 0.75rem;
-    }
-
-    .btn-text {
-      background: none;
-      border: none;
-      color: #2E7D32;
-      cursor: pointer;
-      padding: 0.5rem 0;
-      margin-top: 0.5rem;
     }
 
     .date-inputs, .nights-inputs {
@@ -557,6 +799,12 @@ import { of } from 'rxjs';
       color: white;
     }
 
+    .btn-outline {
+      background: white;
+      color: #333;
+      border: 1px solid #ddd;
+    }
+
     .btn-primary:disabled {
       background: #A5D6A7;
       cursor: not-allowed;
@@ -581,23 +829,39 @@ import { of } from 'rxjs';
       border-radius: 8px;
       text-align: center;
     }
+
+    .btn-small {
+      padding: 0.65rem 1rem;
+      font-size: 0.875rem;
+    }
   `],
 })
-export class AlertCreateComponent implements OnInit {
+export class AlertCreateComponent implements OnInit, OnDestroy {
   private fb = inject(FormBuilder);
   private router = inject(Router);
   private alertsService = inject(AlertsService);
   private parksService = inject(ParksService);
 
+  @ViewChild('parkMap') parkMapElement?: ElementRef<HTMLDivElement>;
+
   loading = signal(false);
   error = signal<string | null>(null);
   searchLoading = signal(false);
+  loadingMoreParks = signal(false);
   campgroundsLoading = signal(false);
+  availableParks = signal<ParkSearchResult[]>([]);
   parkResults = signal<ParkSearchResult[]>([]);
+  parkViewMode = signal<'list' | 'map'>('list');
+  parkAlertability = signal<Record<string, ParkAlertabilityStatus>>({});
+  canLoadMoreParks = signal(false);
   selectedPark = signal<ParkSearchResult | null>(null);
   campgrounds = signal<CampgroundSearchResult[]>([]);
-  selectedCampground = signal<CampgroundSearchResult | null>(null);
+  selectedCampgrounds = signal<CampgroundSearchResult[]>([]);
   selectedSiteTypes = signal<SiteType[]>(['tent', 'rv']);
+  campgroundFilter = signal('');
+
+  private parkMap?: Leaflet.Map;
+  private parkMarkers?: Leaflet.LayerGroup;
 
   minDate = new Date().toISOString().split('T')[0];
 
@@ -614,8 +878,62 @@ export class AlertCreateComponent implements OnInit {
     { id: 'group', name: 'Group', icon: '👥' },
   ];
 
+  states: StateOption[] = [
+    { code: 'AL', name: 'Alabama' },
+    { code: 'AK', name: 'Alaska' },
+    { code: 'AZ', name: 'Arizona' },
+    { code: 'AR', name: 'Arkansas' },
+    { code: 'CA', name: 'California' },
+    { code: 'CO', name: 'Colorado' },
+    { code: 'CT', name: 'Connecticut' },
+    { code: 'DE', name: 'Delaware' },
+    { code: 'FL', name: 'Florida' },
+    { code: 'GA', name: 'Georgia' },
+    { code: 'HI', name: 'Hawaii' },
+    { code: 'ID', name: 'Idaho' },
+    { code: 'IL', name: 'Illinois' },
+    { code: 'IN', name: 'Indiana' },
+    { code: 'IA', name: 'Iowa' },
+    { code: 'KS', name: 'Kansas' },
+    { code: 'KY', name: 'Kentucky' },
+    { code: 'LA', name: 'Louisiana' },
+    { code: 'ME', name: 'Maine' },
+    { code: 'MD', name: 'Maryland' },
+    { code: 'MA', name: 'Massachusetts' },
+    { code: 'MI', name: 'Michigan' },
+    { code: 'MN', name: 'Minnesota' },
+    { code: 'MS', name: 'Mississippi' },
+    { code: 'MO', name: 'Missouri' },
+    { code: 'MT', name: 'Montana' },
+    { code: 'NE', name: 'Nebraska' },
+    { code: 'NV', name: 'Nevada' },
+    { code: 'NH', name: 'New Hampshire' },
+    { code: 'NJ', name: 'New Jersey' },
+    { code: 'NM', name: 'New Mexico' },
+    { code: 'NY', name: 'New York' },
+    { code: 'NC', name: 'North Carolina' },
+    { code: 'ND', name: 'North Dakota' },
+    { code: 'OH', name: 'Ohio' },
+    { code: 'OK', name: 'Oklahoma' },
+    { code: 'OR', name: 'Oregon' },
+    { code: 'PA', name: 'Pennsylvania' },
+    { code: 'RI', name: 'Rhode Island' },
+    { code: 'SC', name: 'South Carolina' },
+    { code: 'SD', name: 'South Dakota' },
+    { code: 'TN', name: 'Tennessee' },
+    { code: 'TX', name: 'Texas' },
+    { code: 'UT', name: 'Utah' },
+    { code: 'VT', name: 'Vermont' },
+    { code: 'VA', name: 'Virginia' },
+    { code: 'WA', name: 'Washington' },
+    { code: 'WV', name: 'West Virginia' },
+    { code: 'WI', name: 'Wisconsin' },
+    { code: 'WY', name: 'Wyoming' },
+  ];
+
   form: FormGroup = this.fb.group({
     parkSystem: ['', Validators.required],
+    stateCode: ['', Validators.required],
     parkSearch: [''],
     dateRangeStart: ['', Validators.required],
     dateRangeEnd: ['', Validators.required],
@@ -626,38 +944,41 @@ export class AlertCreateComponent implements OnInit {
   });
 
   ngOnInit() {
-    // Set up park search debouncing
+    // Filter the preloaded state parks locally as the user types.
     this.form.get('parkSearch')?.valueChanges.pipe(
       debounceTime(300),
       distinctUntilChanged(),
-      switchMap((query) => {
-        if (!query || query.length < 2 || this.selectedPark()) {
-          this.parkResults.set([]);
-          return of([]);
-        }
-        this.searchLoading.set(true);
-        const system = this.form.get('parkSystem')?.value;
-        return this.parksService.searchParks(query, system);
-      })
-    ).subscribe((results) => {
-      this.parkResults.set(results);
-      this.searchLoading.set(false);
+      switchMap((query) => of(query))
+    ).subscribe((query) => {
+      this.updateVisibleParks(query || '');
     });
   }
 
+  ngOnDestroy() {
+    this.destroyParkMap();
+  }
+
   onParkSystemChange() {
-    this.clearPark();
-    this.form.get('parkSearch')?.setValue('');
+    this.form.get('stateCode')?.setValue('');
+    this.parkViewMode.set('list');
+    this.resetParkSelection();
+  }
+
+  onStateChange() {
+    this.resetParkSelection();
+    this.loadParksForState();
   }
 
   selectPark(park: ParkSearchResult) {
     this.selectedPark.set(park);
-    this.parkResults.set([]);
     this.form.get('parkSearch')?.setValue(park.name);
+    this.refreshParkMap();
     
     // Load campgrounds
     this.campgroundsLoading.set(true);
     this.campgrounds.set([]);
+    this.selectedCampgrounds.set([]);
+    this.campgroundFilter.set('');
     this.parksService.getCampgrounds(park.parkSystem, park.id).subscribe({
       next: (cgs) => {
         this.campgrounds.set(cgs);
@@ -672,16 +993,349 @@ export class AlertCreateComponent implements OnInit {
   clearPark() {
     this.selectedPark.set(null);
     this.campgrounds.set([]);
-    this.selectedCampground.set(null);
+    this.selectedCampgrounds.set([]);
+    this.campgroundFilter.set('');
+    this.updateVisibleParks(this.form.get('parkSearch')?.value || '');
+  }
+
+  private resetParkSelection() {
+    this.selectedPark.set(null);
+    this.availableParks.set([]);
+    this.canLoadMoreParks.set(false);
+    this.loadingMoreParks.set(false);
+    this.parkAlertability.set({});
+    this.campgrounds.set([]);
+    this.selectedCampgrounds.set([]);
+    this.campgroundFilter.set('');
+    this.parkResults.set([]);
     this.form.get('parkSearch')?.setValue('');
+    this.refreshParkMap();
   }
 
-  selectCampground(campground: CampgroundSearchResult) {
-    this.selectedCampground.set(campground);
+  setParkViewMode(mode: 'list' | 'map') {
+    this.parkViewMode.set(mode);
+    this.refreshParkMap();
   }
 
-  clearCampground() {
-    this.selectedCampground.set(null);
+  private loadParksForState() {
+    const state = this.form.get('stateCode')?.value;
+    const system = this.form.get('parkSystem')?.value as ParkSystem | '';
+
+    if (!state || !system) {
+      return;
+    }
+
+    this.searchLoading.set(true);
+    this.parksService.searchParks(undefined, system, state, { limit: PARK_PAGE_SIZE, offset: 0 }).subscribe({
+      next: (parks) => {
+        this.availableParks.set(parks);
+        this.canLoadMoreParks.set(parks.length === PARK_PAGE_SIZE);
+        this.updateVisibleParks(this.form.get('parkSearch')?.value || '');
+        this.searchLoading.set(false);
+      },
+      error: () => {
+        this.availableParks.set([]);
+        this.parkResults.set([]);
+        this.canLoadMoreParks.set(false);
+        this.searchLoading.set(false);
+      },
+    });
+  }
+
+  loadMoreParks() {
+    const state = this.form.get('stateCode')?.value;
+    const system = this.form.get('parkSystem')?.value as ParkSystem | '';
+
+    if (!state || !system || this.loadingMoreParks() || !this.canLoadMoreParks()) {
+      return;
+    }
+
+    this.loadingMoreParks.set(true);
+    this.parksService
+      .searchParks(undefined, system, state, {
+        limit: PARK_PAGE_SIZE,
+        offset: this.availableParks().length,
+      })
+      .subscribe({
+        next: (parks) => {
+          const existing = new Map(this.availableParks().map((park) => [park.id, park]));
+          for (const park of parks) {
+            existing.set(park.id, park);
+          }
+
+          this.availableParks.set(Array.from(existing.values()));
+          this.canLoadMoreParks.set(parks.length === PARK_PAGE_SIZE);
+          this.updateVisibleParks(this.form.get('parkSearch')?.value || '');
+          this.loadingMoreParks.set(false);
+        },
+        error: () => {
+          this.loadingMoreParks.set(false);
+        },
+      });
+  }
+
+  private updateVisibleParks(query: string) {
+    const normalizedQuery = query.trim().toLowerCase();
+    const results = this.availableParks().filter((park) => {
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      return (
+        park.name.toLowerCase().includes(normalizedQuery) ||
+        park.state.toLowerCase().includes(normalizedQuery) ||
+        (park.description || '').toLowerCase().includes(normalizedQuery)
+      );
+    });
+
+    this.parkResults.set(results);
+    this.prefetchParkAlertability(results);
+    this.refreshParkMap();
+  }
+
+  private prefetchParkAlertability(parks: ParkSearchResult[]) {
+    const parksToCheck = parks.slice(0, 20);
+
+    for (const park of parksToCheck) {
+      if (!this.isParkAlertabilitySupported(park)) {
+        continue;
+      }
+
+      const currentStatus = this.parkAlertability()[park.id];
+      if (currentStatus) {
+        continue;
+      }
+
+      this.parkAlertability.update((statuses) => ({
+        ...statuses,
+        [park.id]: 'checking',
+      }));
+
+      this.parksService.getCampgrounds(park.parkSystem, park.id).subscribe({
+        next: (campgrounds) => {
+          this.parkAlertability.update((statuses) => ({
+            ...statuses,
+            [park.id]: campgrounds.length > 0 ? 'alertable' : 'not_alertable',
+          }));
+          this.refreshParkMap();
+        },
+        error: () => {
+          this.parkAlertability.update((statuses) => ({
+            ...statuses,
+            [park.id]: 'not_alertable',
+          }));
+          this.refreshParkMap();
+        },
+      });
+    }
+  }
+
+  private refreshParkMap() {
+    setTimeout(() => {
+      void this.renderParkMap();
+    }, 0);
+  }
+
+  private async renderParkMap() {
+    if (this.parkViewMode() !== 'map') {
+      return;
+    }
+
+    const container = this.parkMapElement?.nativeElement;
+    if (!container) {
+      return;
+    }
+
+    const L = await import('leaflet/dist/leaflet-src.esm.js');
+
+    if (!this.parkMap) {
+      this.parkMap = L.map(container, {
+        zoomControl: true,
+        scrollWheelZoom: true,
+      });
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+      }).addTo(this.parkMap);
+
+      this.parkMarkers = L.layerGroup().addTo(this.parkMap);
+    }
+
+    const parkMap = this.parkMap;
+    const parkMarkers = this.parkMarkers;
+
+    if (!parkMap || !parkMarkers) {
+      return;
+    }
+
+    parkMarkers.clearLayers();
+
+    const parks = this.mappableParks();
+    const selectedParkId = this.selectedPark()?.id;
+    if (parks.length === 0) {
+      parkMap.setView([39.8283, -98.5795], 4);
+      parkMap.invalidateSize();
+      return;
+    }
+
+    const bounds = L.latLngBounds([]);
+
+    for (const park of parks) {
+      const isSelected = park.id === selectedParkId;
+      const alertabilityStatus = this.getParkAlertabilityStatus(park.id);
+      const isNotAlertable = alertabilityStatus === 'not_alertable';
+      const marker = L.circleMarker([park.latitude!, park.longitude!], {
+        radius: isSelected ? 11 : 8,
+        color: isSelected ? '#0D47A1' : isNotAlertable ? '#E65100' : '#1B5E20',
+        weight: 2,
+        fillColor: isSelected ? '#42A5F5' : isNotAlertable ? '#FFB74D' : '#43A047',
+        fillOpacity: isSelected ? 0.95 : isNotAlertable ? 0.9 : 0.85,
+      });
+
+      marker.bindPopup(this.getParkPopupHtml(park, isSelected, alertabilityStatus), {
+        closeButton: false,
+        autoPan: true,
+        className: 'park-popup',
+      });
+      marker.on('mouseover', () => marker.openPopup());
+      marker.on('mouseout', () => {
+        if (!this.isParkSelected(park.id)) {
+          marker.closePopup();
+        }
+      });
+      marker.on('click', () => {
+        this.selectPark(park);
+        marker.openPopup();
+      });
+      marker.addTo(parkMarkers);
+      bounds.extend([park.latitude!, park.longitude!]);
+
+      if (isSelected) {
+        marker.openPopup();
+      }
+    }
+
+    if (parks.length === 1) {
+      parkMap.setView([parks[0].latitude!, parks[0].longitude!], 8);
+    } else {
+      parkMap.fitBounds(bounds.pad(0.15));
+    }
+
+    parkMap.invalidateSize();
+  }
+
+  private destroyParkMap() {
+    this.parkMarkers?.clearLayers();
+    this.parkMap?.remove();
+    this.parkMarkers = undefined;
+    this.parkMap = undefined;
+  }
+
+  private getParkPopupHtml(
+    park: ParkSearchResult,
+    isSelected: boolean,
+    alertabilityStatus: ParkAlertabilityStatus | null
+  ): string {
+    const description = park.description
+      ? `${park.description.slice(0, 120)}${park.description.length > 120 ? '...' : ''}`
+      : 'Park details available after selection.';
+    const badgeHtml =
+      alertabilityStatus === 'not_alertable'
+        ? '<span class="park-popup-badge park-popup-badge-warning">Not alertable right now</span>'
+        : alertabilityStatus === 'checking'
+          ? '<span class="park-popup-badge park-popup-badge-muted">Checking...</span>'
+          : isSelected
+            ? '<span class="park-popup-badge">Selected</span>'
+            : '';
+    const footerText =
+      alertabilityStatus === 'not_alertable'
+        ? 'No usable campgrounds found for alerts right now'
+        : isSelected
+          ? 'Current park selection'
+          : 'Click pin to select park';
+
+    return `
+      <div class="park-popup-card">
+        <div class="park-popup-header">
+          <div>
+            <div class="park-popup-title">${park.name}</div>
+            <div class="park-popup-meta">${park.state}${park.campgroundCount ? ` • ${park.campgroundCount} campgrounds` : ''}</div>
+          </div>
+          ${badgeHtml}
+        </div>
+        <div class="park-popup-body">${description}</div>
+        <div class="park-popup-footer">${footerText}</div>
+      </div>
+    `;
+  }
+
+  onCampgroundFilterChange(event: Event) {
+    const value = (event.target as HTMLInputElement | null)?.value || '';
+    this.campgroundFilter.set(value);
+  }
+
+  filteredCampgrounds(): CampgroundSearchResult[] {
+    const filter = this.campgroundFilter().trim().toLowerCase();
+    if (!filter) {
+      return this.campgrounds();
+    }
+
+    return this.campgrounds().filter((campground) =>
+      campground.name.toLowerCase().includes(filter)
+    );
+  }
+
+  isCampgroundSelectionRequired(): boolean {
+    return this.form.get('parkSystem')?.value === 'recreation_gov';
+  }
+
+  mappableParks(): ParkSearchResult[] {
+    return this.parkResults().filter(
+      (park) => typeof park.latitude === 'number' && typeof park.longitude === 'number'
+    );
+  }
+
+  getParkAlertabilityStatus(parkId: string): ParkAlertabilityStatus | null {
+    return this.parkAlertability()[parkId] || null;
+  }
+
+  isParkSelected(parkId: string): boolean {
+    return this.selectedPark()?.id === parkId;
+  }
+
+  private isParkAlertabilitySupported(park: ParkSearchResult): boolean {
+    return park.parkSystem === 'recreation_gov';
+  }
+
+  isCampgroundSelected(campgroundId: string): boolean {
+    return this.selectedCampgrounds().some((campground) => campground.id === campgroundId);
+  }
+
+  toggleCampground(campground: CampgroundSearchResult) {
+    this.selectedCampgrounds.update((selected) => {
+      if (selected.some((item) => item.id === campground.id)) {
+        return selected.filter((item) => item.id !== campground.id);
+      }
+
+      return [...selected, campground].sort((a, b) => a.name.localeCompare(b.name));
+    });
+  }
+
+  selectAllFilteredCampgrounds() {
+    const selectedIds = new Set(this.selectedCampgrounds().map((campground) => campground.id));
+    const merged = [...this.selectedCampgrounds()];
+
+    for (const campground of this.filteredCampgrounds()) {
+      if (!selectedIds.has(campground.id)) {
+        merged.push(campground);
+      }
+    }
+
+    this.selectedCampgrounds.set(merged.sort((a, b) => a.name.localeCompare(b.name)));
+  }
+
+  clearCampgrounds() {
+    this.selectedCampgrounds.set([]);
   }
 
   isSiteTypeSelected(type: string): boolean {
@@ -701,9 +1355,12 @@ export class AlertCreateComponent implements OnInit {
     const park = this.selectedPark();
     if (!park) return 'My Alert';
     
-    const campground = this.selectedCampground();
-    if (campground) {
-      return `${campground.name} Alert`;
+    const selectedCampgrounds = this.selectedCampgrounds();
+    if (selectedCampgrounds.length === 1) {
+      return `${selectedCampgrounds[0].name} Alert`;
+    }
+    if (selectedCampgrounds.length > 1) {
+      return `${park.name} (${selectedCampgrounds.length} campgrounds)`;
     }
     return `${park.name} Alert`;
   }
@@ -713,8 +1370,10 @@ export class AlertCreateComponent implements OnInit {
     const startDate = this.form.get('dateRangeStart')?.value;
     const endDate = this.form.get('dateRangeEnd')?.value;
     const siteTypes = this.selectedSiteTypes();
+    const hasRequiredCampgrounds =
+      !this.isCampgroundSelectionRequired() || this.selectedCampgrounds().length > 0;
     
-    return !!(park && startDate && endDate && siteTypes.length > 0);
+    return !!(park && startDate && endDate && siteTypes.length > 0 && hasRequiredCampgrounds);
   }
 
   onSubmit() {
@@ -724,15 +1383,18 @@ export class AlertCreateComponent implements OnInit {
     this.error.set(null);
 
     const park = this.selectedPark()!;
-    const campground = this.selectedCampground();
+    const selectedCampgrounds = this.selectedCampgrounds();
 
     const alert: CreateAlertDto = {
       name: this.form.get('name')?.value || this.getDefaultName(),
       parkSystem: park.parkSystem,
       parkId: park.id,
       parkName: park.name,
-      campgroundId: campground?.id,
-      campgroundName: campground?.name,
+      stateCode: this.form.get('stateCode')?.value,
+      campgroundId: selectedCampgrounds[0]?.id,
+      campgroundName: selectedCampgrounds[0]?.name,
+      campgroundIds: selectedCampgrounds.map((campground) => campground.id),
+      campgroundNames: selectedCampgrounds.map((campground) => campground.name),
       siteTypes: this.selectedSiteTypes(),
       dateRangeStart: this.form.get('dateRangeStart')?.value,
       dateRangeEnd: this.form.get('dateRangeEnd')?.value,

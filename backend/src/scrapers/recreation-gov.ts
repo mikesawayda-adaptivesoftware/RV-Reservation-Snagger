@@ -25,19 +25,23 @@ export class RecreationGovScraper extends BaseScraper {
       const startDate = this.formatDate(this.parseDate(alert.dateRangeStart));
       const endDate = this.formatDate(this.parseDate(alert.dateRangeEnd));
 
-      // Recreation.gov availability API requires a specific campground/facility ID
-      // The parkId (recAreaId) won't work - we need a facility ID
-      if (!alert.campgroundId) {
+      const campgroundIds = this.getSelectedCampgroundIds(alert);
+
+      // Recreation.gov availability API requires a specific campground/facility ID.
+      if (campgroundIds.length === 0) {
         logger.warn(`Alert ${alert.id} has no campground selected. Recreation.gov requires a specific campground.`);
         throw new Error('No campground selected. Please edit your alert to select a specific campground.');
       }
-      
-      const campgroundId = alert.campgroundId;
-      
-      const availableSites = await this.withRetry(
-        () => this.fetchAvailability(campgroundId, startDate, endDate),
-        `fetching availability for ${campgroundId}`
-      );
+
+      const availableSites: AvailableSite[] = [];
+
+      for (const campgroundId of campgroundIds) {
+        const campgroundSites = await this.withRetry(
+          () => this.fetchAvailability(campgroundId, startDate, endDate),
+          `fetching availability for ${campgroundId}`
+        );
+        availableSites.push(...campgroundSites);
+      }
 
       // Filter by alert criteria
       const filteredSites = this.filterByCriteria(availableSites, alert);

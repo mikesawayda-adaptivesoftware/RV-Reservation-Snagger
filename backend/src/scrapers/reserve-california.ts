@@ -21,11 +21,17 @@ export class ReserveCaliforniaScraper extends BaseScraper {
     try {
       const startDate = this.formatDate(this.parseDate(alert.dateRangeStart));
       const endDate = this.formatDate(this.parseDate(alert.dateRangeEnd));
+      const selectedCampgroundIds = this.getSelectedCampgroundIds(alert);
+      const targets = selectedCampgroundIds.length > 0 ? selectedCampgroundIds : [null];
+      const availableSites: AvailableSite[] = [];
 
-      const availableSites = await this.withRetry(
-        () => this.fetchAvailability(alert.parkId, alert.campgroundId, startDate, endDate),
-        `fetching availability for ${alert.parkId}`
-      );
+      for (const campgroundId of targets) {
+        const sites = await this.withRetry(
+          () => this.fetchAvailability(alert.parkId, campgroundId, startDate, endDate),
+          `fetching availability for ${campgroundId || alert.parkId}`
+        );
+        availableSites.push(...sites);
+      }
 
       // Filter by alert criteria
       const filteredSites = this.filterByCriteria(availableSites, alert);

@@ -83,6 +83,8 @@ export abstract class BaseScraper {
     sites: AvailableSite[],
     alert: CampsiteAlert
   ): AvailableSite[] {
+    const selectedCampgroundIds = this.getSelectedCampgroundIds(alert);
+
     return sites.filter((site) => {
       // Filter by site type
       if (!alert.siteTypes.includes(site.siteType)) {
@@ -97,7 +99,7 @@ export abstract class BaseScraper {
       }
 
       // Filter by campground if specified
-      if (alert.campgroundId && site.campgroundId !== alert.campgroundId) {
+      if (selectedCampgroundIds.length > 0 && !selectedCampgroundIds.includes(site.campgroundId)) {
         return false;
       }
 
@@ -157,6 +159,22 @@ export abstract class BaseScraper {
    */
   protected formatDate(date: Date): string {
     return date.toISOString().split('T')[0];
+  }
+
+  /**
+   * Get all campground IDs selected on the alert.
+   * Falls back to the legacy single-campground shape for older alerts.
+   */
+  protected getSelectedCampgroundIds(alert: CampsiteAlert): string[] {
+    if (alert.campgroundIds && alert.campgroundIds.length > 0) {
+      return alert.campgroundIds;
+    }
+
+    if (alert.campgroundId) {
+      return [alert.campgroundId];
+    }
+
+    return [];
   }
 
   /**

@@ -33,8 +33,8 @@ import { ParksService } from '../../../core/services/parks.service';
             </div>
 
             <h2 class="park-name">{{ alert()!.parkName }}</h2>
-            @if (alert()!.campgroundName) {
-              <p class="campground-name">{{ alert()!.campgroundName }}</p>
+            @if (getCampgroundSummary(alert()!)) {
+              <p class="campground-name">{{ getCampgroundSummary(alert()!) }}</p>
             }
 
             <div class="info-grid">
@@ -51,8 +51,8 @@ import { ParksService } from '../../../core/services/parks.service';
                 <span class="info-value">{{ alert()!.minNights }} - {{ alert()!.maxNights }} nights</span>
               </div>
               <div class="info-item">
-                <span class="info-label">Flexible Dates</span>
-                <span class="info-value">{{ alert()!.flexibleDates ? 'Yes' : 'No' }}</span>
+                <span class="info-label">Campgrounds</span>
+                <span class="info-value">{{ getCampgroundCount(alert()!) }}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">Last Checked</span>
@@ -514,6 +514,46 @@ export class AlertDetailComponent implements OnInit {
       return 'Any';
     }
     return types.map((t) => this.parksService.getSiteTypeName(t as any)).join(', ');
+  }
+
+  getCampgroundNames(alert: CampsiteAlert): string[] {
+    if (alert.campgroundNames && alert.campgroundNames.length > 0) {
+      return alert.campgroundNames;
+    }
+
+    if (alert.campgroundName) {
+      return [alert.campgroundName];
+    }
+
+    return [];
+  }
+
+  getCampgroundSummary(alert: CampsiteAlert): string {
+    const campgroundNames = this.getCampgroundNames(alert);
+
+    if (campgroundNames.length === 0) {
+      return '';
+    }
+
+    if (campgroundNames.length <= 3) {
+      return campgroundNames.join(', ');
+    }
+
+    return `${campgroundNames.slice(0, 2).join(', ')} + ${campgroundNames.length - 2} more`;
+  }
+
+  getCampgroundCount(alert: CampsiteAlert): string {
+    const campgroundNames = this.getCampgroundNames(alert);
+
+    if (campgroundNames.length === 0) {
+      return 'All park campgrounds';
+    }
+
+    if (campgroundNames.length === 1) {
+      return '1 selected';
+    }
+
+    return `${campgroundNames.length} selected`;
   }
 
   formatRelativeTime(date: Date | string | { _seconds: number } | null | undefined): string {

@@ -12,8 +12,11 @@ export interface CampsiteAlert {
   parkSystem: ParkSystem;
   parkId: string;
   parkName: string;
-  campgroundId: string | null;
-  campgroundName: string | null;
+  stateCode?: string | null;
+  campgroundId?: string | null;
+  campgroundName?: string | null;
+  campgroundIds?: string[] | null;
+  campgroundNames?: string[] | null;
   siteTypes: SiteType[];
   dateRangeStart: Date;
   dateRangeEnd: Date;
@@ -34,6 +37,7 @@ export interface AlertMatch {
   userId: string;
   parkSystem: ParkSystem;
   parkName: string;
+  campgroundId?: string;
   campgroundName: string;
   siteName: string;
   siteId: string;
@@ -50,8 +54,11 @@ export interface CreateAlertDto {
   parkSystem: ParkSystem;
   parkId: string;
   parkName: string;
+  stateCode?: string;
   campgroundId?: string;
   campgroundName?: string;
+  campgroundIds?: string[];
+  campgroundNames?: string[];
   siteTypes: SiteType[];
   dateRangeStart: string;
   dateRangeEnd: string;
